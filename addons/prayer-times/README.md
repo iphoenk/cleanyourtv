@@ -1,13 +1,19 @@
 # Prayer Times
 
-Today's five prayer times and sunrise for one city, full screen on the TV, with the next prayer highlighted and a
-countdown to it, plus today's Gregorian and Hijri dates. Each prayer has its Arabic and English name. For the
+Today's five obligatory prayer times and sunrise for one city, full screen on the TV,
+with the next prayer highlighted and a countdown. The calculated Aladhan mode
+shows Gregorian and Hijri dates; Kemenag-through-Sajadah mode shows only the
+Gregorian date to avoid implying an official Indonesian Hijri calendar.
+Each prayer has its localized and Arabic name. For the
 [Clean Your TV](../../README.md) launcher it declares a [module card](../../docs/modules.md), so once you answer
 **Show card** its tile reads "Prayer Times" with a green glow; on any other Android TV home it is an ordinary app.
 
 ![The prayer times page](https://raw.githubusercontent.com/majnioui/cleanyourtv-contrib/pr-assets/addon-prayer-times/prayer-times.png)
 
-- **Data** comes from [Aladhan](https://aladhan.com/), which needs no account or key.
+- **Data** comes from [Aladhan](https://aladhan.com/) by default. Indonesian
+  users can opt in on the TV to Kemenag timetables relayed by
+  [Sajadah Open Data](https://sajadah.org/open-data), without an API key.
+  This is not a direct Kemenag integration.
 - **The city and the calculation method** are set before you build, in `app/src/main/res/values/config.xml`:
   `latitude`, `longitude`, `place` (the name shown) and `method`, Aladhan's
   [method number](https://aladhan.com/calculation-methods) (2 ISNA, 3 Muslim World League, 4 Umm al-Qura,
@@ -103,14 +109,18 @@ should also be checked independently at
 
 | Permission | Why |
 |---|---|
-| `INTERNET` | Aladhan: today's times for the configured coordinates. |
+| `INTERNET` | Aladhan: date, configured coordinates and calculation settings; Sajadah: Indonesian region index and selected region/year timetable. |
 | `SCHEDULE_EXACT_ALARM` | Exact alarm scheduling for prayer time reminders. |
 | `RECEIVE_BOOT_COMPLETED` | Reschedules prayer alarms automatically when the TV boots. |
 | `WAKE_LOCK` | Briefly wakes the screen to deliver the on-screen alert card. |
 | `SYSTEM_ALERT_WINDOW` | Displays the unobtrusive top-right alert card over other apps and video playback on Android 10+. |
 
-That is all. What is sent: today's date, the latitude and longitude from `config.xml`, the method number and the
-Asr school number. No account, no telemetry, no ads, no background service, no location permission. Backups are off.
+That is all. In Aladhan mode, requests include the date, configured latitude/longitude,
+method and Asr school. In Sajadah mode, the client downloads a public region index and
+the selected region's timetable for the relevant year (region ID and year in the URL).
+The server receives normal network metadata such as the requester's IP address.
+No account, GPS/location permission, app telemetry, ads or background service is
+required. Android app backups are disabled.
 
 ## Build and install
 
