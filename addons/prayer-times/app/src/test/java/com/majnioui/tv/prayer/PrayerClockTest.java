@@ -36,6 +36,15 @@ public class PrayerClockTest {
         assertNotNull(PrayerClock.resolve("Asia/Jakarta"));
     }
 
+    @Test public void futureWitaPrayerUsesAbsoluteInstantNotTvWallClock() {
+        Calendar target = PrayerClock.calendar(MOMENT, PrayerClock.resolve("Asia/Makassar"));
+        target.set(Calendar.HOUR_OF_DAY, 4);
+        target.set(Calendar.MINUTE, 30);
+        target.set(Calendar.SECOND, 0);
+        target.set(Calendar.MILLISECOND, 0);
+        assertEquals(Instant.parse("2026-11-07T20:30:00Z").toEpochMilli(), target.getTimeInMillis());
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void misspelledZoneCannotSilentlyBecomeGmt() {
         PrayerClock.resolve("Asia/Jakarta-WIB");
