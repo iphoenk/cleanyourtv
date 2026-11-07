@@ -67,6 +67,34 @@ public class SajadahDataTest {
         catch (java.io.IOException expected) { assertTrue(expected.getMessage().contains("Invalid")); }
     }
 
+    @Test public void fieldOrderCanChangeAndImsakDhuhaCanBeAbsent() throws Exception {
+        JSONObject original = new JSONObject(fixture(true, false, false));
+        JSONArray oldDays = original.getJSONArray("days");
+        JSONArray newRows = new JSONArray();
+        for (int i = 0; i < oldDays.length(); i++) {
+            JSONArray row = oldDays.getJSONArray(i);
+            // Rearranged named columns; imsak (1) and dhuha (4) intentionally omitted.
+            newRows.put(new JSONArray().put(row.getString(8)).put(row.getString(0))
+                    .put(row.getString(6)).put(row.getString(7))
+                    .put(row.getString(3)).put(row.getString(2)).put(row.getString(5)));
+        }
+        original.put("fields", new JSONArray().put("isha").put("date").put("asr")
+                .put("maghrib").put("sunrise").put("fajr").put("dhuhr"));
+        original.put("days", newRows);
+        SajadahData.Day result =
+                SajadahData.parseDay(original.toString(), BANDUNG, "2026-11-07", true);
+        assertEquals(6, result.times.length);
+        assertArrayEquals(new String[]{"04:10","05:25","11:50","15:10","17:50","19:00"},
+                result.times);
+    }
+
+    @Test(expected = java.io.IOException.class)
+    public void rejectsTimezoneMismatchBetweenIndexAndTimetable() throws Exception {
+        JSONObject original = new JSONObject(fixture(true, false, false));
+        original.getJSONObject("region").put("tz", "Asia/Jayapura");
+        SajadahData.parseDay(original.toString(), BANDUNG, "2026-11-07", false);
+    }
+
     @Test public void keepsOnlyIndonesianRegions() throws Exception {
         String json = "{\"schema\":1,\"regions\":["
                 + "{\"country\":\"ID\",\"authority\":\"kemenag\",\"id\":\"kota-bandung\","
