@@ -60,6 +60,45 @@ the portal, or claim to be connected to Kemenag's restricted API. Compare result
 against official local schedules before relying on alerts. Do not assume the Hijri
 calendar returned by Aladhan reflects Indonesia's final sidang-isbat decisions.
 
+## Kemenag timetables through Sajadah (optional)
+
+On the TV, focus the city label at the top and press **OK**. Choose **Kemenag RI via
+Sajadah**, then a province and regency/city. The public region index is loaded from
+`https://sajadah.org/api/v1/regions.json` and a selected year's timetable from
+`https://sajadah.org/api/v1/times/id/{region}/{year}.json`.
+No GPS, API token, additional permission, or backend is needed. The existing
+default (calculated Aladhan times) is unchanged until the user explicitly opts in.
+
+This is **Kemenag RI data supplied via Sajadah**, not a direct authenticated
+connection to Kemenag SIHAT. The relay marks its tables as official and says
+they reproduce Kemenag schedules without changing times. This add-on validates
+the schema and rows, but does not independently authenticate every value or
+cryptographically verify the dataset's provenance.
+
+The region index is cached on disk. Complete validated yearly tables are stored
+atomically in app-private storage, refreshed on demand after 24 hours, and reused
+when offline for the matching date/year/region. A new year is requested on first
+use in that year. The app rejects a missing date, wrong region, incorrect timezone,
+incomplete year, missing required fields, non-increasing times, or an unexpected
+authority. No old region's times, previous day's times, or unlabelled Aladhan
+substitution are allowed in official-table mode. If the next date cannot be loaded,
+reminders are cancelled and, if enabled, automatically retried after an hour.
+
+Only **Subuh, Syuruq, Zuhur, Asar, Magrib, Isya** are consumed from the relay.
+Syuruq remains informational and does not trigger a prayer alarm; **Imsak and
+Dhuha are neither displayed nor scheduled** even if present in the JSON.
+The app uses the selected region's IANA timezone for date, countdown and alarms,
+regardless of the TV's own timezone. Unlike the calculated Aladhan display,
+the official-table mode shows only the Gregorian date: Aladhan Hijri dates
+should not be presented as Indonesia's final sidang-isbat decisions.
+
+This is a **pre-PR development branch**. The relay's documented endpoints were
+not accessible to the agent environment for a full live response check. Verify
+actual HTTP JSON, TV region-picker navigation, reminder scheduling, offline
+cache and rollover behavior before upstream submission. A sample of dates
+should also be checked independently at
+[Bimas Islam Kemenag](https://bimasislam.kemenag.go.id/jadwal-sholat).
+
 ## Permissions
 
 | Permission | Why |
