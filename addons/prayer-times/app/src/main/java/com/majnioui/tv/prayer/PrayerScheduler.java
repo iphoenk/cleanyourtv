@@ -14,10 +14,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.Locale;
+import java.util.TimeZone;
 
 public class PrayerScheduler {
     private static final String TAG = "PrayerScheduler";
@@ -27,10 +26,12 @@ public class PrayerScheduler {
     public static final String EXTRA_PRAYER_NAME = "prayer_name";
     public static final String EXTRA_PRAYER_TIME = "prayer_time";
     public static final String EXTRA_PLACE = "place";
+    public static final String EXTRA_SOURCE = "provider_key";
 
     private static final String PREFS_NAME = "prayer_prefs";
     private static final String KEY_DATE = "cached_date";
     private static final String KEY_PLACE = "place";
+    private static final String KEY_SOURCE = "timetable_source";
 
     public static final String[] NAMES = {"Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"};
     public static final int[] NAME_RES = {
@@ -64,6 +65,8 @@ public class PrayerScheduler {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putString(KEY_DATE, day);
         editor.putString(KEY_PLACE, place);
+        SajadahData.Region chosen = SajadahData.selected(ctx);
+        editor.putString(KEY_SOURCE, chosen == null ? "aladhan" : "sajadah:" + chosen.id);
         for (int i = 0; i < names.length; i++) {
             editor.putString("time_" + names[i], times[i]);
             editor.putInt("min_" + names[i], minutes[i]);
@@ -117,9 +120,21 @@ public class PrayerScheduler {
 
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String savedDate = prefs.getString(KEY_DATE, "");
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date());
+        SajadahData.Region chosen = SajadahData.selected(ctx);
+        String sourceKey = chosen == null ? "aladhan" : "sajadah:" + chosen.id;
+        TimeZone cityZone;
+        try {
+            cityZone = PrayerClock.resolve(chosen == null ?
+                    ctx.getString(R.string.time_zone) : chosen.zone);
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "Invalid timetable timezone: reminders not scheduled", e);
+            cancel(ctx);
+            return;
+        }
+        String today = PrayerClock.isoDay(new Date(), cityZone);
 
-        if (!today.equals(savedDate)) {
+        if (!today.equals(savedDate) ||
+                !sourceKey.equals(prefs.getString(KEY_SOURCE, ""))) {
             // Data for today is not available yet, fetch in background
             fetchTimingsAndSchedule(ctx);
             return;
@@ -133,7 +148,7 @@ public class PrayerScheduler {
             times[i] = prefs.getString("time_" + NAMES[i], "");
         }
 
-        Calendar now = Calendar.getInstance();
+        Calendar now = Calendar.getInstance(cityZone);
         int nowMinute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
         int nextIdx = -1;
 
@@ -165,6 +180,7 @@ public class PrayerScheduler {
             intent.putExtra(EXTRA_PRAYER_NAME, NAMES[nextIdx]);
             intent.putExtra(EXTRA_PRAYER_TIME, times[nextIdx]);
             intent.putExtra(EXTRA_PLACE, place);
+            intent.putExtra(EXTRA_SOURCE, sourceKey);
 
             PendingIntent pi = PendingIntent.getBroadcast(
                     ctx,
@@ -217,6 +233,20 @@ public class PrayerScheduler {
         }
     }
 
+    /** Retry a missing official date rather than silently using stale alarms. */
+    private static void retryRefresh(Context ctx) {
+        if (!ctx.getResources().getBoolean(R.bool.reminders)) return;
+        AlarmManager manager = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        if (manager == null) return;
+        Intent intent = new Intent(ctx, PrayerReceiver.class);
+        intent.setAction(ACTION_REFRESH_ALARM);
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, 1002, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT |
+                        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
+                                PendingIntent.FLAG_IMMUTABLE : 0));
+        setAlarm(manager, System.currentTimeMillis() + 60L * 60 * 1000, pi);
+    }
+
     public static void fetchTimingsAndSchedule(Context ctx) {
         if (!ctx.getResources().getBoolean(R.bool.reminders)) {
             cancel(ctx);
@@ -226,8 +256,32 @@ public class PrayerScheduler {
         new Thread(() -> {
             try {
                 Context appContext = ctx.getApplicationContext();
-                String day = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date());
-                String dayParam = new SimpleDateFormat("dd-MM-yyyy", Locale.ROOT).format(new Date());
+                Date now = new Date();
+                SajadahData.Region chosen = SajadahData.selected(appContext);
+                if (chosen != null) {
+                    try {
+                        SajadahData.Day timetable = SajadahData.today(appContext, now);
+                        SajadahData.Region stillSelected = SajadahData.selected(appContext);
+                        if (!SajadahData.sameRegion(chosen, stillSelected))
+                            return; // Region or timezone changed during network fetch.
+                        saveTimingsAndSchedule(appContext, timetable.isoDay, NAMES,
+                                timetable.times, timetable.minutes, timetable.regionName);
+                    } catch (Exception e) {
+                        // A superseded request must not cancel a newer region's alarms,
+                        // or the Aladhan alarms after switching back to that source.
+                        if (!SajadahData.sameRegion(chosen, SajadahData.selected(appContext))) {
+                            Log.i(TAG, "Ignoring superseded timetable fetch failure");
+                            return;
+                        }
+                        Log.w(TAG, "Kemenag timetable unavailable; retry in one hour", e);
+                        cancel(appContext);
+                        retryRefresh(appContext);
+                    }
+                    return;
+                }
+                TimeZone cityZone = PrayerClock.resolve(appContext.getString(R.string.time_zone));
+                String day = PrayerClock.isoDay(now, cityZone);
+                String dayParam = PrayerClock.apiDay(now, cityZone);
                 String url = "https://api.aladhan.com/v1/timings/" + dayParam
                         + "?latitude=" + appContext.getString(R.string.latitude)
                         + "&longitude=" + appContext.getString(R.string.longitude)

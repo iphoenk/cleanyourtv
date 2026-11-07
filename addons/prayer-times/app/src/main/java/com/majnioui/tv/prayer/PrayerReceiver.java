@@ -36,6 +36,13 @@ public class PrayerReceiver extends BroadcastReceiver {
         }
 
         if (PrayerScheduler.ACTION_PRAYER_ALARM.equals(action)) {
+            SajadahData.Region active = SajadahData.selected(context);
+            String source = active == null ? "aladhan" : "sajadah:" + active.id;
+            if (!source.equals(intent.getStringExtra(PrayerScheduler.EXTRA_SOURCE))) {
+                Log.w(TAG, "Ignoring stale reminder after source/region change");
+                PrayerScheduler.scheduleNext(context);
+                return;
+            }
             String name = intent.getStringExtra(PrayerScheduler.EXTRA_PRAYER_NAME);
             String time = intent.getStringExtra(PrayerScheduler.EXTRA_PRAYER_TIME);
             String place = intent.getStringExtra(PrayerScheduler.EXTRA_PLACE);

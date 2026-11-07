@@ -1,0 +1,52 @@
+package com.majnioui.tv.prayer;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
+import java.time.Instant;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.TimeZone;
+import org.junit.Test;
+
+public class PrayerClockTest {
+    private static final Date MOMENT = Date.from(Instant.parse("2026-11-07T16:30:00Z"));
+
+    @Test public void threeIndonesianZonesUseLocalCalendarDates() {
+        assertEquals("2026-11-07", PrayerClock.isoDay(MOMENT, PrayerClock.resolve("Asia/Jakarta")));
+        assertEquals("2026-11-08", PrayerClock.isoDay(MOMENT, PrayerClock.resolve("Asia/Makassar")));
+        assertEquals("2026-11-08", PrayerClock.isoDay(MOMENT, PrayerClock.resolve("Asia/Jayapura")));
+        assertEquals("07-11-2026", PrayerClock.apiDay(MOMENT, PrayerClock.resolve("Asia/Jakarta")));
+        assertEquals("08-11-2026", PrayerClock.apiDay(MOMENT, PrayerClock.resolve("Asia/Makassar")));
+    }
+
+    @Test public void regionCalendarUsesRegionWallClock() {
+        Calendar wib = PrayerClock.calendar(MOMENT, PrayerClock.resolve("Asia/Jakarta"));
+        Calendar wita = PrayerClock.calendar(MOMENT, PrayerClock.resolve("Asia/Makassar"));
+        Calendar wit = PrayerClock.calendar(MOMENT, PrayerClock.resolve("Asia/Jayapura"));
+        assertEquals(23, wib.get(Calendar.HOUR_OF_DAY));
+        assertEquals(0, wita.get(Calendar.HOUR_OF_DAY));
+        assertEquals(1, wit.get(Calendar.HOUR_OF_DAY));
+        assertEquals(8, wit.get(Calendar.DAY_OF_MONTH));
+    }
+
+    @Test public void emptyTimezoneKeepsLegacyBehaviour() {
+        assertEquals(TimeZone.getDefault().getID(), PrayerClock.resolve("").getID());
+        assertEquals(TimeZone.getDefault().getID(), PrayerClock.resolve(null).getID());
+        assertNotNull(PrayerClock.resolve("Asia/Jakarta"));
+    }
+
+    @Test public void futureWitaPrayerUsesAbsoluteInstantNotTvWallClock() {
+        Calendar target = PrayerClock.calendar(MOMENT, PrayerClock.resolve("Asia/Makassar"));
+        target.set(Calendar.HOUR_OF_DAY, 4);
+        target.set(Calendar.MINUTE, 30);
+        target.set(Calendar.SECOND, 0);
+        target.set(Calendar.MILLISECOND, 0);
+        assertEquals(Instant.parse("2026-11-07T20:30:00Z").toEpochMilli(), target.getTimeInMillis());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void misspelledZoneCannotSilentlyBecomeGmt() {
+        PrayerClock.resolve("Asia/Jakarta-WIB");
+    }
+}
