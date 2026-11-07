@@ -30,6 +30,7 @@ public class PrayerScheduler {
     private static final String PREFS_NAME = "prayer_prefs";
     private static final String KEY_DATE = "cached_date";
     private static final String KEY_PLACE = "place";
+    private static final String KEY_SOURCE = "timetable_source";
 
     public static final String[] NAMES = {"Fajr", "Sunrise", "Dhuhr", "Asr", "Maghrib", "Isha"};
     public static final int[] NAME_RES = {
@@ -63,6 +64,8 @@ public class PrayerScheduler {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putString(KEY_DATE, day);
         editor.putString(KEY_PLACE, place);
+        SajadahData.Region chosen = SajadahData.selected(ctx);
+        editor.putString(KEY_SOURCE, chosen == null ? "aladhan" : "sajadah:" + chosen.id);
         for (int i = 0; i < names.length; i++) {
             editor.putString("time_" + names[i], times[i]);
             editor.putInt("min_" + names[i], minutes[i]);
@@ -116,9 +119,12 @@ public class PrayerScheduler {
 
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String savedDate = prefs.getString(KEY_DATE, "");
+        SajadahData.Region chosen = SajadahData.selected(ctx);
+        String sourceKey = chosen == null ? "aladhan" : "sajadah:" + chosen.id;
         TimeZone cityZone;
         try {
-            cityZone = PrayerClock.resolve(ctx.getString(R.string.time_zone));
+            cityZone = PrayerClock.resolve(chosen == null ?
+                    ctx.getString(R.string.time_zone) : chosen.zone);
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Invalid timetable timezone: reminders not scheduled", e);
             cancel(ctx);
@@ -126,7 +132,8 @@ public class PrayerScheduler {
         }
         String today = PrayerClock.isoDay(new Date(), cityZone);
 
-        if (!today.equals(savedDate)) {
+        if (!today.equals(savedDate) ||
+                !sourceKey.equals(prefs.getString(KEY_SOURCE, ""))) {
             // Data for today is not available yet, fetch in background
             fetchTimingsAndSchedule(ctx);
             return;
@@ -224,6 +231,20 @@ public class PrayerScheduler {
         }
     }
 
+    /** Retry a missing official date rather than silently using stale alarms. */
+    private static void retryRefresh(Context ctx) {
+        if (!ctx.getResources().getBoolean(R.bool.reminders)) return;
+        AlarmManager manager = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        if (manager == null) return;
+        Intent intent = new Intent(ctx, PrayerReceiver.class);
+        intent.setAction(ACTION_REFRESH_ALARM);
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, 1002, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT |
+                        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
+                                PendingIntent.FLAG_IMMUTABLE : 0));
+        setAlarm(manager, System.currentTimeMillis() + 60L * 60 * 1000, pi);
+    }
+
     public static void fetchTimingsAndSchedule(Context ctx) {
         if (!ctx.getResources().getBoolean(R.bool.reminders)) {
             cancel(ctx);
@@ -233,8 +254,21 @@ public class PrayerScheduler {
         new Thread(() -> {
             try {
                 Context appContext = ctx.getApplicationContext();
-                TimeZone cityZone = PrayerClock.resolve(appContext.getString(R.string.time_zone));
                 Date now = new Date();
+                SajadahData.Region chosen = SajadahData.selected(appContext);
+                if (chosen != null) {
+                    try {
+                        SajadahData.Day timetable = SajadahData.today(appContext, now);
+                        saveTimingsAndSchedule(appContext, timetable.isoDay, NAMES,
+                                timetable.times, timetable.minutes, timetable.regionName);
+                    } catch (Exception e) {
+                        Log.w(TAG, "Kemenag timetable unavailable; retry in one hour", e);
+                        cancel(appContext);
+                        retryRefresh(appContext);
+                    }
+                    return;
+                }
+                TimeZone cityZone = PrayerClock.resolve(appContext.getString(R.string.time_zone));
                 String day = PrayerClock.isoDay(now, cityZone);
                 String dayParam = PrayerClock.apiDay(now, cityZone);
                 String url = "https://api.aladhan.com/v1/timings/" + dayParam
