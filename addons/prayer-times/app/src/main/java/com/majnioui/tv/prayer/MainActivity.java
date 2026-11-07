@@ -1,6 +1,7 @@
 package com.majnioui.tv.prayer;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -27,6 +28,10 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Today's prayer times for one city from Aladhan (free, no account or key; only the coordinates and
@@ -54,6 +59,9 @@ public class MainActivity extends Activity {
     private int accent;
     private TextView dates, next, status;
     private LinearLayout rows;
+    private TextView regionLabel;
+    private boolean sajadahCache;
+    private int selectionGeneration;
     /** Today's times as minutes after midnight, in NAMES order; null until loaded. */
     private int[] minutes;
     private String[] times;
@@ -78,7 +86,8 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         try {
-            cityZone = PrayerClock.resolve(getString(R.string.time_zone));
+            SajadahData.Region chosen = SajadahData.selected(this);
+            cityZone = PrayerClock.resolve(chosen == null ? getString(R.string.time_zone) : chosen.zone);
         } catch (IllegalArgumentException e) {
             invalidCityZone = true;
             Log.e(TAG, "Invalid prayer timezone configuration", e);
@@ -95,10 +104,13 @@ public class MainActivity extends Activity {
         col.setPadding(dp(80), dp(48), dp(80), dp(40));
         root.addView(col, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView place = text(18, 400, 0xB3FFFFFF);
-        place.setLetterSpacing(0.25f);
-        place.setText(getString(R.string.place).toUpperCase(Locale.ROOT));
-        col.addView(place);
+        regionLabel = text(18, 400, 0xB3FFFFFF);
+        regionLabel.setLetterSpacing(0.1f);
+        regionLabel.setFocusable(true);
+        regionLabel.setClickable(true);
+        regionLabel.setOnClickListener(v -> showSourceMenu());
+        updateRegionLabel();
+        col.addView(regionLabel);
 
         next = text(52, 300, 0xFFFFFFFF);
         next.setPadding(0, dp(10), 0, dp(4));
@@ -144,8 +156,14 @@ public class MainActivity extends Activity {
     private void load() {
         if (loading) return;
         loading = true;
+        if (SajadahData.selected(this) != null) {
+            loadSajadah();
+            return;
+        }
+        sajadahCache = false;
         final Date now = new Date();
         final String day = PrayerClock.isoDay(now, cityZone);
+        final int generation = selectionGeneration;
         String url = "https://api.aladhan.com/v1/timings/"
                 + PrayerClock.apiDay(now, cityZone)
                 + "?latitude=" + getString(R.string.latitude) + "&longitude=" + getString(R.string.longitude)
@@ -159,6 +177,7 @@ public class MainActivity extends Activity {
             }
             final JSONObject result = json;
             main.post(() -> {
+                if (generation != selectionGeneration || isFinishing() || isDestroyed()) return;
                 loading = false;
                 if (result == null) {
                     status.setText(getString(R.string.offline));
@@ -177,6 +196,139 @@ public class MainActivity extends Activity {
                     Log.w(TAG, "parse: " + e);
                     status.setText(getString(R.string.unexpected_error));
                 }
+            });
+        }).start();
+    }
+
+    private void updateRegionLabel() {
+        SajadahData.Region region = SajadahData.selected(this);
+        String value = region == null
+                ? getString(R.string.place) + " · " + getString(R.string.pick_region)
+                : region.name + " (" + region.province + ") · " + getString(R.string.change_region);
+        regionLabel.setText(value.toUpperCase(Locale.getDefault()));
+    }
+
+    private void showSourceMenu() {
+        new AlertDialog.Builder(this).setTitle(R.string.choose_source)
+                .setItems(new String[]{getString(R.string.aladhan_source),
+                                getString(R.string.sajadah_source)},
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                SajadahData.clear(this);
+                                PrayerScheduler.cancel(this);
+                                resetAfterRegionChange();
+                            } else {
+                                chooseSajadahRegion();
+                            }
+                        }).setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    private void chooseSajadahRegion() {
+        status.setText(getString(R.string.loading_regions));
+        new Thread(() -> {
+            List<SajadahData.Region> regions = null;
+            try {
+                regions = SajadahData.regions(getApplicationContext());
+            } catch (Exception e) {
+                Log.w(TAG, "Region list unavailable", e);
+            }
+            final List<SajadahData.Region> results = regions;
+            main.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (results == null || results.isEmpty()) {
+                    status.setText(getString(R.string.regions_unavailable));
+                    return;
+                }
+                Set<String> set = new LinkedHashSet<>();
+                for (SajadahData.Region region : results) set.add(region.province);
+                List<String> provinces = new ArrayList<>(set);
+                new AlertDialog.Builder(this).setTitle(R.string.choose_province)
+                        .setItems(provinces.toArray(new String[0]), (d, which) ->
+                                chooseCity(results, provinces.get(which)))
+                        .setNegativeButton(android.R.string.cancel, null).show();
+            });
+        }).start();
+    }
+
+    private void chooseCity(List<SajadahData.Region> regions, String province) {
+        List<SajadahData.Region> cities = new ArrayList<>();
+        for (SajadahData.Region region : regions) {
+            if (province.equals(region.province)) cities.add(region);
+        }
+        String[] names = new String[cities.size()];
+        for (int i = 0; i < cities.size(); i++) names[i] = cities.get(i).name;
+        new AlertDialog.Builder(this).setTitle(province)
+                .setItems(names, (dialog, which) -> {
+                    SajadahData.select(this, cities.get(which));
+                    PrayerScheduler.cancel(this);
+                    resetAfterRegionChange();
+                })
+                .setNegativeButton(android.R.string.cancel, null).show();
+    }
+
+    private void resetAfterRegionChange() {
+        selectionGeneration++;
+        loading = false;
+        try {
+            SajadahData.Region chosen = SajadahData.selected(this);
+            cityZone = PrayerClock.resolve(chosen == null ?
+                    getString(R.string.time_zone) : chosen.zone);
+            invalidCityZone = false;
+        } catch (IllegalArgumentException e) {
+            invalidCityZone = true;
+            status.setText(getString(R.string.invalid_time_zone, getString(R.string.time_zone)));
+            return;
+        }
+        loadedFor = null;
+        minutes = null;
+        times = null;
+        rows.removeAllViews();
+        updateRegionLabel();
+        load();
+    }
+
+    private void loadSajadah() {
+        final int generation = selectionGeneration;
+        new Thread(() -> {
+            SajadahData.Day day = null;
+            try {
+                day = SajadahData.today(getApplicationContext(), new Date());
+            } catch (Exception e) {
+                Log.w(TAG, "Kemenag timetable unavailable", e);
+            }
+            final SajadahData.Day result = day;
+            main.post(() -> {
+                if (generation != selectionGeneration || isFinishing() || isDestroyed()) return;
+                loading = false;
+                if (result == null) {
+                    minutes = null;
+                    times = null;
+                    loadedFor = null;
+                    rows.removeAllViews();
+                    next.setText(getString(R.string.schedule_unavailable));
+                    status.setText(getString(R.string.regions_offline));
+                    if (getResources().getBoolean(R.bool.reminders))
+                        PrayerScheduler.fetchTimingsAndSchedule(this);
+                    else
+                        PrayerScheduler.cancel(this);
+                    return;
+                }
+                cityZone = result.zone;
+                minutes = result.minutes;
+                times = result.times;
+                loadedFor = result.isoDay;
+                sajadahCache = result.cached;
+                SimpleDateFormat label =
+                        new SimpleDateFormat("EEEE d MMMM yyyy", Locale.getDefault());
+                label.setTimeZone(cityZone);
+                dates.setText(label.format(new Date()));
+                if (getResources().getBoolean(R.bool.reminders)) {
+                    PrayerScheduler.saveTimingsAndSchedule(this, result.isoDay,
+                            NAMES, times, minutes, result.regionName);
+                } else {
+                    PrayerScheduler.cancel(this);
+                }
+                render();
             });
         }).start();
     }
@@ -263,7 +415,10 @@ public class MainActivity extends Activity {
         SimpleDateFormat localTime = new SimpleDateFormat("HH:mm", Locale.ROOT);
         localTime.setTimeZone(cityZone);
         String updated = getString(R.string.updated_at, localTime.format(new Date()));
-        String statusStr = "Aladhan" + (methodName.isEmpty() ? "" : " · " + methodName) + " · " + updated;
+        String statusStr = SajadahData.selected(this) != null
+                ? getString(R.string.sajadah_source) + (sajadahCache ?
+                    " · " + getString(R.string.cached_data) : "") + " · " + updated
+                : "Aladhan" + (methodName.isEmpty() ? "" : " · " + methodName) + " · " + updated;
         if (reminders) {
             statusStr += " · " + getString(R.string.reminders_active);
         }
