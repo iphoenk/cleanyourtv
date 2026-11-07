@@ -26,6 +26,7 @@ public class PrayerScheduler {
     public static final String EXTRA_PRAYER_NAME = "prayer_name";
     public static final String EXTRA_PRAYER_TIME = "prayer_time";
     public static final String EXTRA_PLACE = "place";
+    public static final String EXTRA_SOURCE = "provider_key";
 
     private static final String PREFS_NAME = "prayer_prefs";
     private static final String KEY_DATE = "cached_date";
@@ -179,6 +180,7 @@ public class PrayerScheduler {
             intent.putExtra(EXTRA_PRAYER_NAME, NAMES[nextIdx]);
             intent.putExtra(EXTRA_PRAYER_TIME, times[nextIdx]);
             intent.putExtra(EXTRA_PLACE, place);
+            intent.putExtra(EXTRA_SOURCE, sourceKey);
 
             PendingIntent pi = PendingIntent.getBroadcast(
                     ctx,
@@ -259,6 +261,9 @@ public class PrayerScheduler {
                 if (chosen != null) {
                     try {
                         SajadahData.Day timetable = SajadahData.today(appContext, now);
+                        SajadahData.Region stillSelected = SajadahData.selected(appContext);
+                        if (stillSelected == null || !chosen.id.equals(stillSelected.id))
+                            return; // Region changed during network fetch.
                         saveTimingsAndSchedule(appContext, timetable.isoDay, NAMES,
                                 timetable.times, timetable.minutes, timetable.regionName);
                     } catch (Exception e) {

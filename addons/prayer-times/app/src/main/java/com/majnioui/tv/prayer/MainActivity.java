@@ -283,6 +283,8 @@ public class MainActivity extends Activity {
         minutes = null;
         times = null;
         rows.removeAllViews();
+        next.setText(getString(R.string.loading));
+        status.setText(getString(R.string.loading));
         updateRegionLabel();
         load();
     }
