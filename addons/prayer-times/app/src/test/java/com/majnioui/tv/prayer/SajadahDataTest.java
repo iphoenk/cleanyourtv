@@ -95,6 +95,16 @@ public class SajadahDataTest {
         SajadahData.parseDay(original.toString(), BANDUNG, "2026-11-07", false);
     }
 
+    @Test public void regionSwitchRejectsOldNetworkResultsAndFailures() {
+        assertTrue(SajadahData.sameRegion(BANDUNG,
+                new SajadahData.Region("kota-bandung", "Bandung", "Jawa Barat", "Asia/Jakarta")));
+        assertFalse(SajadahData.sameRegion(BANDUNG,
+                new SajadahData.Region("kota-bandung", "Bandung", "Jawa Barat", "Asia/Makassar")));
+        assertFalse(SajadahData.sameRegion(BANDUNG,
+                new SajadahData.Region("kota-bogor", "Bogor", "Jawa Barat", "Asia/Jakarta")));
+        assertFalse(SajadahData.sameRegion(BANDUNG, null));
+    }
+
     @Test public void keepsOnlyIndonesianRegions() throws Exception {
         String json = "{\"schema\":1,\"regions\":["
                 + "{\"country\":\"ID\",\"authority\":\"kemenag\",\"id\":\"kota-bandung\","

@@ -262,11 +262,17 @@ public class PrayerScheduler {
                     try {
                         SajadahData.Day timetable = SajadahData.today(appContext, now);
                         SajadahData.Region stillSelected = SajadahData.selected(appContext);
-                        if (stillSelected == null || !chosen.id.equals(stillSelected.id))
-                            return; // Region changed during network fetch.
+                        if (!SajadahData.sameRegion(chosen, stillSelected))
+                            return; // Region or timezone changed during network fetch.
                         saveTimingsAndSchedule(appContext, timetable.isoDay, NAMES,
                                 timetable.times, timetable.minutes, timetable.regionName);
                     } catch (Exception e) {
+                        // A superseded request must not cancel a newer region's alarms,
+                        // or the Aladhan alarms after switching back to that source.
+                        if (!SajadahData.sameRegion(chosen, SajadahData.selected(appContext))) {
+                            Log.i(TAG, "Ignoring superseded timetable fetch failure");
+                            return;
+                        }
                         Log.w(TAG, "Kemenag timetable unavailable; retry in one hour", e);
                         cancel(appContext);
                         retryRefresh(appContext);

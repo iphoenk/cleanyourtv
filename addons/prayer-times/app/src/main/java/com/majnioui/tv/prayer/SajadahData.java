@@ -86,6 +86,17 @@ final class SajadahData {
         return new Region(id, name, province, zone);
     }
 
+
+    /**
+     * Compare both region and civil timezone. A background fetch must not
+     * schedule or cancel alarms for a selection made after it began.
+     */
+    static boolean sameRegion(Region expected, Region current) {
+        return expected != null && current != null &&
+                expected.id.equals(current.id) &&
+                expected.zone.equals(current.zone);
+    }
+
     static void select(Context context, Region region) {
         if (!validId(region.id) || !validZone(region.zone))
             throw new IllegalArgumentException("Invalid region");
