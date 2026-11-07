@@ -34,3 +34,13 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
 }
+
+/*
+ * Add-ons CI builds assembleRelease. Make the Prayer Times provider's local JVM
+ * parser tests part of that gate without changing shared GitHub workflows.
+ */
+afterEvaluate {
+    tasks.named('assembleRelease').configure {
+        dependsOn tasks.named('testReleaseUnitTest')
+    }
+}
