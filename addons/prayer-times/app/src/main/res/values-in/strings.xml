@@ -30,5 +30,5 @@
     <string name="choose_province">Pilih provinsi</string>
     <string name="schedule_unavailable">Jadwal tervalidasi untuk tanggal ini belum tersedia</string>
     <string name="regions_offline">Jadwal Kemenag tidak tersedia; tidak diganti dengan hitungan.</string>
-    <string name="cached_data">Jadwal tersimpan offline</string>
+    <string name="cached_data">Jadwal tersimpan lokal</string>
 </resources>

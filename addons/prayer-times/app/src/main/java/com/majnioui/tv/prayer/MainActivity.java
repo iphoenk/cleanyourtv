@@ -417,9 +417,10 @@ public class MainActivity extends Activity {
         SimpleDateFormat localTime = new SimpleDateFormat("HH:mm", Locale.ROOT);
         localTime.setTimeZone(cityZone);
         String updated = getString(R.string.updated_at, localTime.format(new Date()));
+        // An offline-cache read is not a fresh publisher update.
         String statusStr = SajadahData.selected(this) != null
                 ? getString(R.string.sajadah_source) + (sajadahCache ?
-                    " · " + getString(R.string.cached_data) : "") + " · " + updated
+                    " · " + getString(R.string.cached_data) : "")
                 : "Aladhan" + (methodName.isEmpty() ? "" : " · " + methodName) + " · " + updated;
         if (reminders) {
             statusStr += " · " + getString(R.string.reminders_active);
