@@ -2,7 +2,6 @@ package com.majnioui.tv.prayer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertSame;
 
 import java.time.Instant;
 import java.util.Calendar;
@@ -32,8 +31,8 @@ public class PrayerClockTest {
     }
 
     @Test public void emptyTimezoneKeepsLegacyBehaviour() {
-        assertSame(TimeZone.getDefault(), PrayerClock.resolve(""));
-        assertSame(TimeZone.getDefault(), PrayerClock.resolve(null));
+        assertEquals(TimeZone.getDefault().getID(), PrayerClock.resolve("").getID());
+        assertEquals(TimeZone.getDefault().getID(), PrayerClock.resolve(null).getID());
         assertNotNull(PrayerClock.resolve("Asia/Jakarta"));
     }
 
