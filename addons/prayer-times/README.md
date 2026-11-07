@@ -44,6 +44,12 @@ together in `app/src/main/res/values/config.xml`. Example city-center coordinate
 | Denpasar | -8.6500 | 115.2167 | 20 | `Asia/Makassar` (WITA) |
 | Jayapura | -2.5337 | 140.7181 | 20 | `Asia/Jayapura` (WIT) |
 
+Only the five obligatory prayers (Fajr/Subuh, Dhuhr/Zuhur, Asr/Asar,
+Maghrib/Magrib, and Isha/Isya) are used for prayer countdowns and reminders.
+Sunrise/Syuruq remains informational as in the existing add-on. **Imsak and Dhuha
+are deliberately excluded from display, reminders and feature scope**, even if
+returned by an Indonesian timetable provider.
+
 The timezone affects the requested local **date**, the time displayed, countdown,
 and scheduled alerts, not just the timezone label. For example, an instant late in
 the evening in WIB may already be tomorrow in WITA and WIT.
