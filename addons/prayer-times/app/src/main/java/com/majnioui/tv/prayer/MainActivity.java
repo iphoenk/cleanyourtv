@@ -26,6 +26,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
+import java.util.TimeZone;
 
 /**
  * Today's prayer times for one city from Aladhan (free, no account or key; only the coordinates and
@@ -61,6 +62,8 @@ public class MainActivity extends Activity {
     /** The day the times are for (yyyy-MM-dd), to reload after midnight. */
     private String loadedFor;
     private boolean loading;
+    private TimeZone cityZone;
+    private boolean invalidCityZone;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -74,6 +77,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        try {
+            cityZone = PrayerClock.resolve(getString(R.string.time_zone));
+        } catch (IllegalArgumentException e) {
+            invalidCityZone = true;
+            Log.e(TAG, "Invalid prayer timezone configuration", e);
+        }
         font = getResources().getFont(R.font.outfit);
         accent = getColor(R.color.accent);
 
@@ -114,6 +123,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (invalidCityZone) {
+            status.setText(getString(R.string.invalid_time_zone, getString(R.string.time_zone)));
+            return;
+        }
         load();
         main.postDelayed(tick, MINUTE_MS);
     }
@@ -124,16 +137,17 @@ public class MainActivity extends Activity {
         main.removeCallbacks(tick);
     }
 
-    private static String today() {
-        return new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date());
+    private String today() {
+        return PrayerClock.isoDay(new Date(), cityZone);
     }
 
     private void load() {
         if (loading) return;
         loading = true;
-        final String day = today();
+        final Date now = new Date();
+        final String day = PrayerClock.isoDay(now, cityZone);
         String url = "https://api.aladhan.com/v1/timings/"
-                + new SimpleDateFormat("dd-MM-yyyy", Locale.ROOT).format(new Date())
+                + PrayerClock.apiDay(now, cityZone)
                 + "?latitude=" + getString(R.string.latitude) + "&longitude=" + getString(R.string.longitude)
                 + "&method=" + getString(R.string.method) + "&school=" + getString(R.string.school);
         new Thread(() -> {
@@ -185,14 +199,16 @@ public class MainActivity extends Activity {
         methodName = method != null ? method.optString("name", "") : "";
         JSONObject date = data.getJSONObject("date");
         JSONObject hijri = date.getJSONObject("hijri");
-        dates.setText(new SimpleDateFormat("EEEE d MMMM", Locale.ENGLISH).format(new Date()) + "  ·  "
+        SimpleDateFormat localDate = new SimpleDateFormat("EEEE d MMMM", Locale.ENGLISH);
+        localDate.setTimeZone(cityZone);
+        dates.setText(localDate.format(new Date()) + "  ·  "
                 + hijri.getString("day") + " " + hijri.getJSONObject("month").getString("en") + " "
                 + hijri.getString("year") + " AH");
     }
 
     private void render() {
         if (minutes == null) return;
-        Calendar c = Calendar.getInstance();
+        Calendar c = Calendar.getInstance(cityZone);
         int now = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
         int nextIdx = -1;
         for (int i = 0; i < NAMES.length; i++) {
@@ -244,7 +260,9 @@ public class MainActivity extends Activity {
             rows.addView(card, lp);
         }
         boolean reminders = getResources().getBoolean(R.bool.reminders);
-        String updated = getString(R.string.updated_at, new SimpleDateFormat("HH:mm", Locale.ROOT).format(new Date()));
+        SimpleDateFormat localTime = new SimpleDateFormat("HH:mm", Locale.ROOT);
+        localTime.setTimeZone(cityZone);
+        String updated = getString(R.string.updated_at, localTime.format(new Date()));
         String statusStr = "Aladhan" + (methodName.isEmpty() ? "" : " · " + methodName) + " · " + updated;
         if (reminders) {
             statusStr += " · " + getString(R.string.reminders_active);

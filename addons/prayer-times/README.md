@@ -12,6 +12,10 @@ countdown to it, plus today's Gregorian and Hijri dates. Each prayer has its Ara
   `latitude`, `longitude`, `place` (the name shown) and `method`, Aladhan's
   [method number](https://aladhan.com/calculation-methods) (2 ISNA, 3 Muslim World League, 4 Umm al-Qura,
   5 Egyptian, 13 Turkey, 21 Morocco...). The default is Casablanca with the Morocco method.
+- **The optional `time_zone`** is an IANA timezone for the configured city. Leave it empty to use the TV's
+  timezone as before. This matters when the TV and prayer timetable use different zones: the day sent to
+  Aladhan, countdown, and reminder alarms must agree. An invalid value displays a configuration error and
+  prevents reminders; it does not silently fall back to GMT.
 - **The Asr school** is `school`, Aladhan's juristic school for Asr: `0` Shafi (the default) or `1` Hanafi.
   Hanafi users see the later Asr time; leave it at `0` and nothing changes.
 - **Reminders switch**: In `app/src/main/res/values/config.xml`, `reminders` controls whether to schedule
@@ -22,6 +26,33 @@ countdown to it, plus today's Gregorian and Hijri dates. Each prayer has its Ara
 - It reads Aladhan when the page opens and again after midnight. The countdown updates every minute.
   Offline, the last times stay on screen.
 - 24-hour times, localized prayer names and strings for English, Indonesian (`values-in`), and Arabic (`values-ar`).
+
+## Indonesia (WIB, WITA and WIT)
+
+The existing Aladhan API has calculation method **20**, named "Kementerian Agama
+Indonesia" by Aladhan. It is **a calculation method**, not a feed of actual published
+timetables from the Indonesian Ministry of Religious Affairs (Kemenag). Do not label
+its output as verified official Kemenag timetable data.
+
+Set `latitude`, `longitude`, `place`, `method` and the new optional `time_zone`
+together in `app/src/main/res/values/config.xml`. Example city-center coordinates
+(approximate; choose the correct locality before building):
+
+| City | Latitude | Longitude | Method | `time_zone` |
+|---|---:|---:|---:|---|
+| Jakarta | -6.2088 | 106.8456 | 20 | `Asia/Jakarta` (WIB) |
+| Denpasar | -8.6500 | 115.2167 | 20 | `Asia/Makassar` (WITA) |
+| Jayapura | -2.5337 | 140.7181 | 20 | `Asia/Jayapura` (WIT) |
+
+The timezone affects the requested local **date**, the time displayed, countdown,
+and scheduled alerts, not just the timezone label. For example, an instant late in
+the evening in WIB may already be tomorrow in WITA and WIT.
+
+The [Bimas Islam jadwal sholat portal](https://bimasislam.kemenag.go.id/jadwal-sholat)
+is the reference for published schedules. This add-on does not request tokens, scrape
+the portal, or claim to be connected to Kemenag's restricted API. Compare results
+against official local schedules before relying on alerts. Do not assume the Hijri
+calendar returned by Aladhan reflects Indonesia's final sidang-isbat decisions.
 
 ## Permissions
 

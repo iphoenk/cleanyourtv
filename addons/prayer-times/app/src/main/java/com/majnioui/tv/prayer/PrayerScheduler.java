@@ -18,6 +18,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
+import java.util.TimeZone;
 
 public class PrayerScheduler {
     private static final String TAG = "PrayerScheduler";
@@ -117,7 +118,15 @@ public class PrayerScheduler {
 
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String savedDate = prefs.getString(KEY_DATE, "");
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date());
+        TimeZone cityZone;
+        try {
+            cityZone = PrayerClock.resolve(ctx.getString(R.string.time_zone));
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "Invalid timetable timezone: reminders not scheduled", e);
+            cancel(ctx);
+            return;
+        }
+        String today = PrayerClock.isoDay(new Date(), cityZone);
 
         if (!today.equals(savedDate)) {
             // Data for today is not available yet, fetch in background
@@ -133,7 +142,7 @@ public class PrayerScheduler {
             times[i] = prefs.getString("time_" + NAMES[i], "");
         }
 
-        Calendar now = Calendar.getInstance();
+        Calendar now = Calendar.getInstance(cityZone);
         int nowMinute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
         int nextIdx = -1;
 
@@ -226,8 +235,10 @@ public class PrayerScheduler {
         new Thread(() -> {
             try {
                 Context appContext = ctx.getApplicationContext();
-                String day = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date());
-                String dayParam = new SimpleDateFormat("dd-MM-yyyy", Locale.ROOT).format(new Date());
+                TimeZone cityZone = PrayerClock.resolve(appContext.getString(R.string.time_zone));
+                Date now = new Date();
+                String day = PrayerClock.isoDay(now, cityZone);
+                String dayParam = PrayerClock.apiDay(now, cityZone);
                 String url = "https://api.aladhan.com/v1/timings/" + dayParam
                         + "?latitude=" + appContext.getString(R.string.latitude)
                         + "&longitude=" + appContext.getString(R.string.longitude)
